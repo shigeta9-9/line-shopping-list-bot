@@ -1,0 +1,38 @@
+# Google Apps Script 関連
+.clasp.json
+.claspignore
+
+# 環境変数・設定ファイル
+.env
+config.json
+secrets.json
+
+# ログファイル
+*.log
+logs/
+
+# 一時ファイル
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# バックアップファイル
+*.bak
+*.backup
+
+# 機密情報を含むファイル
+credentials.json
+token.json
+*.key
+*.pem
+
+# テスト用ファイル
+test_*.gs
+*_test.gs 
