@@ -1,9 +1,10 @@
 /**
- * LINE Messaging API 買い物リストBot
+ * LINE Messaging API 買い物リスト・タスクリストBot
  *
  * 主な仕様:
- * - LINEからのメッセージを受信し、買い物リストを管理
+ * - LINEからのメッセージを受信し、買い物リストとタスクリストを管理
  * - スプレッドシートにアイテムの追加・削除・一覧表示機能
+ * - シート1: 買い物リスト、シート2: タスクリスト
  * - デバッグ用ログ出力機能付き
  *
  * 制限事項:
@@ -27,9 +28,12 @@ function doPost(e) {
       console.log('手動実行または無効なリクエストです。テスト関数を使用してください。');
       console.log('使用可能なテスト関数:');
       console.log('- testBot() : 基本的なテスト');
-      console.log('- testAddItem() : アイテム追加テスト');
-      console.log('- testDeleteItem() : アイテム削除テスト');
-      console.log('- testGetList() : 一覧取得テスト');
+      console.log('- testAddShoppingItem() : 買い物アイテム追加テスト');
+      console.log('- testDeleteShoppingItem() : 買い物アイテム削除テスト');
+      console.log('- testGetShoppingList() : 買い物一覧取得テスト');
+      console.log('- testAddTask() : タスク追加テスト');
+      console.log('- testDeleteTask() : タスク削除テスト');
+      console.log('- testGetTaskList() : タスク一覧取得テスト');
       return;
     }
 
@@ -59,26 +63,48 @@ function doPost(e) {
 
     let replyText = '';
 
-    if (userMessage.startsWith('追加　')) {
-      const item = userMessage.replace('追加　', '').trim();
-      console.log('追加アイテム:', item);
+    // 買い物リスト関連のコマンド
+    if (userMessage.startsWith('買い物追加　')) {
+      const item = userMessage.replace('買い物追加　', '').trim();
+      console.log('買い物追加アイテム:', item);
       if (item) {
-        addItemToSheet(item);
-        replyText = `リストに「${item}」を追加しました。`;
+        addShoppingItemToSheet(item);
+        replyText = `買い物リストに「${item}」を追加しました。`;
       }
-    } else if (userMessage.startsWith('削除　')) {
-      const item = userMessage.replace('削除　', '').trim();
-      console.log('削除アイテム:', item);
+    } else if (userMessage.startsWith('買い物削除　')) {
+      const item = userMessage.replace('買い物削除　', '').trim();
+      console.log('買い物削除アイテム:', item);
       if (item) {
-        const success = deleteItemFromSheet(item);
-        replyText = success ? `「${item}」を削除しました。` : `「${item}」は見つかりませんでした。`;
+        const success = deleteShoppingItemFromSheet(item);
+        replyText = success ? `「${item}」を買い物リストから削除しました。` : `「${item}」は買い物リストに見つかりませんでした。`;
       }
-    } else if (userMessage === '一覧') {
-      console.log('一覧表示リクエスト');
-      replyText = getListFromSheet();
-    } else {
+    } else if (userMessage === '買い物一覧') {
+      console.log('買い物一覧表示リクエスト');
+      replyText = getShoppingListFromSheet();
+    }
+    // タスクリスト関連のコマンド
+    else if (userMessage.startsWith('タスク追加　')) {
+      const task = userMessage.replace('タスク追加　', '').trim();
+      console.log('タスク追加:', task);
+      if (task) {
+        addTaskToSheet(task);
+        replyText = `タスクリストに「${task}」を追加しました。`;
+      }
+    } else if (userMessage.startsWith('タスク削除　')) {
+      const task = userMessage.replace('タスク削除　', '').trim();
+      console.log('タスク削除:', task);
+      if (task) {
+        const success = deleteTaskFromSheet(task);
+        replyText = success ? `「${task}」をタスクリストから削除しました。` : `「${task}」はタスクリストに見つかりませんでした。`;
+      }
+    } else if (userMessage === 'タスク一覧') {
+      console.log('タスク一覧表示リクエスト');
+      replyText = getTaskListFromSheet();
+    }
+    // ヘルプメッセージ
+    else {
       console.log('未対応のメッセージ:', userMessage);
-      replyText = '使い方:\n・「追加　牛乳」でアイテム追加\n・「削除　卵」でアイテム削除\n・「一覧」でリスト表示';
+      replyText = '使い方:\n\n【買い物リスト】\n・「買い物追加　牛乳」でアイテム追加\n・「買い物削除　卵」でアイテム削除\n・「買い物一覧」でリスト表示\n\n【タスクリスト】\n・「タスク追加　掃除」でタスク追加\n・「タスク削除　洗濯」でタスク削除\n・「タスク一覧」でリスト表示';
     }
 
     console.log('返信テキスト:', replyText);
@@ -91,43 +117,43 @@ function doPost(e) {
 }
 
 /**
- * スプレッドシートにアイテムを追加する関数
+ * スプレッドシートのシート1（買い物リスト）にアイテムを追加する関数
  * @param {string} item - 追加するアイテム名
  */
-function addItemToSheet(item) {
+function addShoppingItemToSheet(item) {
   try {
-    console.log('=== addItemToSheet開始 ===');
+    console.log('=== addShoppingItemToSheet開始 ===');
     console.log('追加アイテム:', item);
 
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     console.log('スプレッドシートID:', spreadsheet.getId());
 
-    const sheet = spreadsheet.getActiveSheet();
+    const sheet = spreadsheet.getSheets()[0]; // シート1（買い物リスト）
     console.log('シート名:', sheet.getName());
 
     const timestamp = new Date();
     console.log('タイムスタンプ:', timestamp);
 
     sheet.appendRow([item, timestamp]);
-    console.log('アイテム追加完了');
+    console.log('買い物アイテム追加完了');
 
   } catch (error) {
-    console.error('addItemToSheetでエラーが発生:', error);
+    console.error('addShoppingItemToSheetでエラーが発生:', error);
     throw error;
   }
 }
 
 /**
- * スプレッドシートからアイテムを削除する関数
+ * スプレッドシートのシート1（買い物リスト）からアイテムを削除する関数
  * @param {string} item - 削除するアイテム名
  * @returns {boolean} 削除成功時true、失敗時false
  */
-function deleteItemFromSheet(item) {
+function deleteShoppingItemFromSheet(item) {
   try {
-    console.log('=== deleteItemFromSheet開始 ===');
+    console.log('=== deleteShoppingItemFromSheet開始 ===');
     console.log('削除アイテム:', item);
 
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0]; // シート1（買い物リスト）
     const data = sheet.getDataRange().getValues();
 
     console.log('シートデータ行数:', data.length);
@@ -137,7 +163,7 @@ function deleteItemFromSheet(item) {
       if (data[i][0] === item) {
         console.log('削除対象行:', i + 1);
         sheet.deleteRow(i + 1); // スプレッドシートは1始まり
-        console.log('アイテム削除完了');
+        console.log('買い物アイテム削除完了');
         return true;
       }
     }
@@ -146,39 +172,156 @@ function deleteItemFromSheet(item) {
     return false;
 
   } catch (error) {
-    console.error('deleteItemFromSheetでエラーが発生:', error);
+    console.error('deleteShoppingItemFromSheetでエラーが発生:', error);
     return false;
   }
 }
 
 /**
- * スプレッドシートから一覧を取得する関数
+ * スプレッドシートのシート1（買い物リスト）から一覧を取得する関数
  * @returns {string} 一覧テキスト
  */
-function getListFromSheet() {
+function getShoppingListFromSheet() {
   try {
-    console.log('=== getListFromSheet開始 ===');
+    console.log('=== getShoppingListFromSheet開始 ===');
 
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0]; // シート1（買い物リスト）
     const data = sheet.getDataRange().getValues();
 
     console.log('シートデータ行数:', data.length);
     console.log('シートデータ:', JSON.stringify(data, null, 2));
 
     if (data.length === 0) {
-      console.log('リストは空です');
-      return 'リストは空です。';
+      console.log('買い物リストは空です');
+      return '買い物リストは空です。';
     }
 
     const list = data.map(row => `・${row[0]}`).join('\n');
-    const result = `現在のリスト:\n${list}`;
+    const result = `現在の買い物リスト:\n${list}`;
 
-    console.log('一覧取得完了:', result);
+    console.log('買い物一覧取得完了:', result);
     return result;
 
   } catch (error) {
-    console.error('getListFromSheetでエラーが発生:', error);
-    return 'リストの取得に失敗しました。';
+    console.error('getShoppingListFromSheetでエラーが発生:', error);
+    return '買い物リストの取得に失敗しました。';
+  }
+}
+
+/**
+ * スプレッドシートのシート2（タスクリスト）にタスクを追加する関数
+ * @param {string} task - 追加するタスク名
+ */
+function addTaskToSheet(task) {
+  try {
+    console.log('=== addTaskToSheet開始 ===');
+    console.log('追加タスク:', task);
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    console.log('スプレッドシートID:', spreadsheet.getId());
+
+    // シート2が存在しない場合は作成
+    let sheet;
+    if (spreadsheet.getSheets().length < 2) {
+      sheet = spreadsheet.insertSheet('シート2');
+      console.log('シート2を作成しました');
+    } else {
+      sheet = spreadsheet.getSheets()[1]; // シート2（タスクリスト）
+    }
+    console.log('シート名:', sheet.getName());
+
+    const timestamp = new Date();
+    console.log('タイムスタンプ:', timestamp);
+
+    sheet.appendRow([task, timestamp]);
+    console.log('タスク追加完了');
+
+  } catch (error) {
+    console.error('addTaskToSheetでエラーが発生:', error);
+    throw error;
+  }
+}
+
+/**
+ * スプレッドシートのシート2（タスクリスト）からタスクを削除する関数
+ * @param {string} task - 削除するタスク名
+ * @returns {boolean} 削除成功時true、失敗時false
+ */
+function deleteTaskFromSheet(task) {
+  try {
+    console.log('=== deleteTaskFromSheet開始 ===');
+    console.log('削除タスク:', task);
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet;
+
+    // シート2が存在しない場合はfalseを返す
+    if (spreadsheet.getSheets().length < 2) {
+      console.log('シート2が存在しません');
+      return false;
+    }
+
+    sheet = spreadsheet.getSheets()[1]; // シート2（タスクリスト）
+    const data = sheet.getDataRange().getValues();
+
+    console.log('シートデータ行数:', data.length);
+    console.log('シートデータ:', JSON.stringify(data, null, 2));
+
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === task) {
+        console.log('削除対象行:', i + 1);
+        sheet.deleteRow(i + 1); // スプレッドシートは1始まり
+        console.log('タスク削除完了');
+        return true;
+      }
+    }
+
+    console.log('削除対象タスクが見つかりませんでした');
+    return false;
+
+  } catch (error) {
+    console.error('deleteTaskFromSheetでエラーが発生:', error);
+    return false;
+  }
+}
+
+/**
+ * スプレッドシートのシート2（タスクリスト）から一覧を取得する関数
+ * @returns {string} 一覧テキスト
+ */
+function getTaskListFromSheet() {
+  try {
+    console.log('=== getTaskListFromSheet開始 ===');
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet;
+
+    // シート2が存在しない場合は空のリストを返す
+    if (spreadsheet.getSheets().length < 2) {
+      console.log('シート2が存在しません');
+      return 'タスクリストは空です。';
+    }
+
+    sheet = spreadsheet.getSheets()[1]; // シート2（タスクリスト）
+    const data = sheet.getDataRange().getValues();
+
+    console.log('シートデータ行数:', data.length);
+    console.log('シートデータ:', JSON.stringify(data, null, 2));
+
+    if (data.length === 0) {
+      console.log('タスクリストは空です');
+      return 'タスクリストは空です。';
+    }
+
+    const list = data.map(row => `・${row[0]}`).join('\n');
+    const result = `現在のタスクリスト:\n${list}`;
+
+    console.log('タスク一覧取得完了:', result);
+    return result;
+
+  } catch (error) {
+    console.error('getTaskListFromSheetでエラーが発生:', error);
+    return 'タスクリストの取得に失敗しました。';
   }
 }
 
@@ -248,7 +391,7 @@ function testBot() {
           type: 'message',
           replyToken: 'test-reply-token',
           message: {
-            text: '一覧'
+            text: '買い物一覧'
           }
         }]
       })
@@ -260,10 +403,10 @@ function testBot() {
 }
 
 /**
- * アイテム追加のテスト用関数
+ * 買い物アイテム追加のテスト用関数
  */
-function testAddItem() {
-  console.log('=== アイテム追加テスト開始 ===');
+function testAddShoppingItem() {
+  console.log('=== 買い物アイテム追加テスト開始 ===');
 
   // テスト用のイベントオブジェクトを作成
   const testEvent = {
@@ -271,9 +414,9 @@ function testAddItem() {
       contents: JSON.stringify({
         events: [{
           type: 'message',
-          replyToken: 'test-add-token',
+          replyToken: 'test-add-shopping-token',
           message: {
-            text: '追加　テストアイテム'
+            text: '買い物追加　テストアイテム'
           }
         }]
       })
@@ -281,14 +424,14 @@ function testAddItem() {
   };
 
   doPost(testEvent);
-  console.log('=== アイテム追加テスト完了 ===');
+  console.log('=== 買い物アイテム追加テスト完了 ===');
 }
 
 /**
- * アイテム削除のテスト用関数
+ * 買い物アイテム削除のテスト用関数
  */
-function testDeleteItem() {
-  console.log('=== アイテム削除テスト開始 ===');
+function testDeleteShoppingItem() {
+  console.log('=== 買い物アイテム削除テスト開始 ===');
 
   // テスト用のイベントオブジェクトを作成
   const testEvent = {
@@ -296,9 +439,9 @@ function testDeleteItem() {
       contents: JSON.stringify({
         events: [{
           type: 'message',
-          replyToken: 'test-delete-token',
+          replyToken: 'test-delete-shopping-token',
           message: {
-            text: '削除　テストアイテム'
+            text: '買い物削除　テストアイテム'
           }
         }]
       })
@@ -306,14 +449,14 @@ function testDeleteItem() {
   };
 
   doPost(testEvent);
-  console.log('=== アイテム削除テスト完了 ===');
+  console.log('=== 買い物アイテム削除テスト完了 ===');
 }
 
 /**
- * 一覧取得のテスト用関数
+ * 買い物一覧取得のテスト用関数
  */
-function testGetList() {
-  console.log('=== 一覧取得テスト開始 ===');
+function testGetShoppingList() {
+  console.log('=== 買い物一覧取得テスト開始 ===');
 
   // テスト用のイベントオブジェクトを作成
   const testEvent = {
@@ -321,9 +464,9 @@ function testGetList() {
       contents: JSON.stringify({
         events: [{
           type: 'message',
-          replyToken: 'test-list-token',
+          replyToken: 'test-list-shopping-token',
           message: {
-            text: '一覧'
+            text: '買い物一覧'
           }
         }]
       })
@@ -331,7 +474,82 @@ function testGetList() {
   };
 
   doPost(testEvent);
-  console.log('=== 一覧取得テスト完了 ===');
+  console.log('=== 買い物一覧取得テスト完了 ===');
+}
+
+/**
+ * タスク追加のテスト用関数
+ */
+function testAddTask() {
+  console.log('=== タスク追加テスト開始 ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-add-task-token',
+          message: {
+            text: 'タスク追加　テストタスク'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== タスク追加テスト完了 ===');
+}
+
+/**
+ * タスク削除のテスト用関数
+ */
+function testDeleteTask() {
+  console.log('=== タスク削除テスト開始 ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-delete-task-token',
+          message: {
+            text: 'タスク削除　テストタスク'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== タスク削除テスト完了 ===');
+}
+
+/**
+ * タスク一覧取得のテスト用関数
+ */
+function testGetTaskList() {
+  console.log('=== タスク一覧取得テスト開始 ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-list-task-token',
+          message: {
+            text: 'タスク一覧'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== タスク一覧取得テスト完了 ===');
 }
 
 /**
@@ -345,14 +563,19 @@ function checkSpreadsheet() {
     console.log('スプレッドシートID:', spreadsheet.getId());
     console.log('スプレッドシート名:', spreadsheet.getName());
 
-    const sheet = spreadsheet.getActiveSheet();
-    console.log('アクティブシート名:', sheet.getName());
-    console.log('シートの行数:', sheet.getLastRow());
-    console.log('シートの列数:', sheet.getLastColumn());
+    const sheets = spreadsheet.getSheets();
+    console.log('シート数:', sheets.length);
 
-    const data = sheet.getDataRange().getValues();
-    console.log('データ行数:', data.length);
-    console.log('データ内容:', JSON.stringify(data, null, 2));
+    for (let i = 0; i < sheets.length; i++) {
+      const sheet = sheets[i];
+      console.log(`シート${i + 1}名:`, sheet.getName());
+      console.log(`シート${i + 1}の行数:`, sheet.getLastRow());
+      console.log(`シート${i + 1}の列数:`, sheet.getLastColumn());
+
+      const data = sheet.getDataRange().getValues();
+      console.log(`シート${i + 1}データ行数:`, data.length);
+      console.log(`シート${i + 1}データ内容:`, JSON.stringify(data, null, 2));
+    }
 
   } catch (error) {
     console.error('スプレッドシート確認でエラー:', error);
