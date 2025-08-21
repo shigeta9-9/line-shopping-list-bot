@@ -29,10 +29,18 @@ function doPost(e) {
       console.log('使用可能なテスト関数:');
       console.log('- testBot() : 基本的なテスト');
       console.log('- testAddShoppingItem() : 買い物アイテム追加テスト');
+      console.log('- testAddMultipleShoppingItems() : 複数買い物アイテム追加テスト（読点区切り）');
+      console.log('- testAddMultipleShoppingItemsWithSpace() : 複数買い物アイテム追加テスト（スペース区切り）');
       console.log('- testDeleteShoppingItem() : 買い物アイテム削除テスト');
+      console.log('- testDeleteMultipleShoppingItems() : 複数買い物アイテム削除テスト（読点区切り）');
+      console.log('- testDeleteMultipleShoppingItemsWithSpace() : 複数買い物アイテム削除テスト（スペース区切り）');
       console.log('- testGetShoppingList() : 買い物一覧取得テスト');
       console.log('- testAddTask() : タスク追加テスト');
+      console.log('- testAddMultipleTasks() : 複数タスク追加テスト（読点区切り）');
+      console.log('- testAddMultipleTasksWithSpace() : 複数タスク追加テスト（スペース区切り）');
       console.log('- testDeleteTask() : タスク削除テスト');
+      console.log('- testDeleteMultipleTasks() : 複数タスク削除テスト（読点区切り）');
+      console.log('- testDeleteMultipleTasksWithSpace() : 複数タスク削除テスト（スペース区切り）');
       console.log('- testGetTaskList() : タスク一覧取得テスト');
       return;
     }
@@ -61,41 +69,136 @@ function doPost(e) {
     console.log('返信トークン:', replyToken);
     console.log('ユーザーメッセージ:', userMessage);
 
+    // 全角スペース（U+3000）を半角スペース（U+0020）に正規化
+    const normalizedMessage = userMessage.replace(/\u3000/g, ' ');
+
     let replyText = '';
 
     // 買い物リスト関連のコマンド
-    if (userMessage.startsWith('買い物追加　')) {
-      const item = userMessage.replace('買い物追加　', '').trim();
-      console.log('買い物追加アイテム:', item);
-      if (item) {
-        addShoppingItemToSheet(item);
-        replyText = `買い物リストに「${item}」を追加しました。`;
+    if (normalizedMessage.match(/^買い物追加\s+/)) {
+      const itemsText = normalizedMessage.replace(/^買い物追加\s+/, '').trim();
+      console.log('買い物追加アイテム:', itemsText);
+      if (itemsText) {
+        // 読点（、）とスペース（全角・半角）で区切って複数アイテムを処理
+        const items = itemsText.split(/[、\s]+/).map(item => item.trim()).filter(item => item.length > 0);
+        console.log('分割されたアイテム:', items);
+
+        if (items.length > 0) {
+          const addedItems = [];
+          for (const item of items) {
+            addShoppingItemToSheet(item);
+            addedItems.push(item);
+          }
+
+          if (items.length === 1) {
+            replyText = `買い物リストに「${addedItems[0]}」を追加しました。`;
+          } else {
+            replyText = `買い物リストに以下のアイテムを追加しました：\n${addedItems.map(item => `・${item}`).join('\n')}`;
+          }
+        }
       }
-    } else if (userMessage.startsWith('買い物削除　')) {
-      const item = userMessage.replace('買い物削除　', '').trim();
-      console.log('買い物削除アイテム:', item);
-      if (item) {
-        const success = deleteShoppingItemFromSheet(item);
-        replyText = success ? `「${item}」を買い物リストから削除しました。` : `「${item}」は買い物リストに見つかりませんでした。`;
+    } else if (normalizedMessage.match(/^買い物削除\s+/)) {
+      const itemsText = normalizedMessage.replace(/^買い物削除\s+/, '').trim();
+      console.log('買い物削除アイテム:', itemsText);
+      if (itemsText) {
+        // 読点（、）とスペース（全角・半角）で区切って複数アイテムを処理
+        const items = itemsText.split(/[、\s]+/).map(item => item.trim()).filter(item => item.length > 0);
+        console.log('分割された削除アイテム:', items);
+
+        if (items.length > 0) {
+          const successItems = [];
+          const failedItems = [];
+
+          for (const item of items) {
+            const success = deleteShoppingItemFromSheet(item);
+            if (success) {
+              successItems.push(item);
+            } else {
+              failedItems.push(item);
+            }
+          }
+
+          if (items.length === 1) {
+            replyText = successItems.length > 0 ?
+              `「${successItems[0]}」を買い物リストから削除しました。` :
+              `「${failedItems[0]}」は買い物リストに見つかりませんでした。`;
+          } else {
+            let resultText = '';
+            if (successItems.length > 0) {
+              resultText += `削除成功：\n${successItems.map(item => `・${item}`).join('\n')}`;
+            }
+            if (failedItems.length > 0) {
+              if (resultText) resultText += '\n\n';
+              resultText += `削除失敗（見つかりませんでした）：\n${failedItems.map(item => `・${item}`).join('\n')}`;
+            }
+            replyText = resultText;
+          }
+        }
       }
     } else if (userMessage === '買い物一覧') {
       console.log('買い物一覧表示リクエスト');
       replyText = getShoppingListFromSheet();
     }
     // タスクリスト関連のコマンド
-    else if (userMessage.startsWith('タスク追加　')) {
-      const task = userMessage.replace('タスク追加　', '').trim();
-      console.log('タスク追加:', task);
-      if (task) {
-        addTaskToSheet(task);
-        replyText = `タスクリストに「${task}」を追加しました。`;
+    else if (normalizedMessage.match(/^タスク追加\s+/)) {
+      const tasksText = normalizedMessage.replace(/^タスク追加\s+/, '').trim();
+      console.log('タスク追加:', tasksText);
+      if (tasksText) {
+        // 読点（、）とスペース（全角・半角）で区切って複数タスクを処理
+        const tasks = tasksText.split(/[、\s]+/).map(task => task.trim()).filter(task => task.length > 0);
+        console.log('分割されたタスク:', tasks);
+
+        if (tasks.length > 0) {
+          const addedTasks = [];
+          for (const task of tasks) {
+            addTaskToSheet(task);
+            addedTasks.push(task);
+          }
+
+          if (tasks.length === 1) {
+            replyText = `タスクリストに「${addedTasks[0]}」を追加しました。`;
+          } else {
+            replyText = `タスクリストに以下のタスクを追加しました：\n${addedTasks.map(task => `・${task}`).join('\n')}`;
+          }
+        }
       }
-    } else if (userMessage.startsWith('タスク削除　')) {
-      const task = userMessage.replace('タスク削除　', '').trim();
-      console.log('タスク削除:', task);
-      if (task) {
-        const success = deleteTaskFromSheet(task);
-        replyText = success ? `「${task}」をタスクリストから削除しました。` : `「${task}」はタスクリストに見つかりませんでした。`;
+    } else if (normalizedMessage.match(/^タスク削除\s+/)) {
+      const tasksText = normalizedMessage.replace(/^タスク削除\s+/, '').trim();
+      console.log('タスク削除:', tasksText);
+      if (tasksText) {
+        // 読点（、）とスペース（全角・半角）で区切って複数タスクを処理
+        const tasks = tasksText.split(/[、\s]+/).map(task => task.trim()).filter(task => task.length > 0);
+        console.log('分割された削除タスク:', tasks);
+
+        if (tasks.length > 0) {
+          const successTasks = [];
+          const failedTasks = [];
+
+          for (const task of tasks) {
+            const success = deleteTaskFromSheet(task);
+            if (success) {
+              successTasks.push(task);
+            } else {
+              failedTasks.push(task);
+            }
+          }
+
+          if (tasks.length === 1) {
+            replyText = successTasks.length > 0 ?
+              `「${successTasks[0]}」をタスクリストから削除しました。` :
+              `「${failedTasks[0]}」はタスクリストに見つかりませんでした。`;
+          } else {
+            let resultText = '';
+            if (successTasks.length > 0) {
+              resultText += `削除成功：\n${successTasks.map(task => `・${task}`).join('\n')}`;
+            }
+            if (failedTasks.length > 0) {
+              if (resultText) resultText += '\n\n';
+              resultText += `削除失敗（見つかりませんでした）：\n${failedTasks.map(task => `・${task}`).join('\n')}`;
+            }
+            replyText = resultText;
+          }
+        }
       }
     } else if (userMessage === 'タスク一覧') {
       console.log('タスク一覧表示リクエスト');
@@ -104,7 +207,7 @@ function doPost(e) {
     // ヘルプメッセージ
     else {
       console.log('未対応のメッセージ:', userMessage);
-      replyText = '使い方:\n\n【買い物リスト】\n・「買い物追加　牛乳」でアイテム追加\n・「買い物削除　卵」でアイテム削除\n・「買い物一覧」でリスト表示\n\n【タスクリスト】\n・「タスク追加　掃除」でタスク追加\n・「タスク削除　洗濯」でタスク削除\n・「タスク一覧」でリスト表示';
+      replyText = '使い方:\n\n【買い物リスト】\n・「買い物追加　牛乳」でアイテム追加\n・「買い物追加　パン、バナナ、トマト」で複数アイテム追加（読点区切り）\n・「買い物追加　パン　バナナ　トマト」で複数アイテム追加（スペース区切り）\n・「買い物削除　卵」でアイテム削除\n・「買い物削除　パン、バナナ、トマト」で複数アイテム削除（読点区切り）\n・「買い物削除　パン　バナナ　トマト」で複数アイテム削除（スペース区切り）\n・「買い物一覧」でリスト表示\n\n【タスクリスト】\n・「タスク追加　掃除」でタスク追加\n・「タスク追加　洗濯、料理、買い物」で複数タスク追加（読点区切り）\n・「タスク追加　掃除　洗濯　料理」で複数タスク追加（スペース区切り）\n・「タスク削除　洗濯」でタスク削除\n・「タスク削除　掃除、洗濯、料理」で複数タスク削除（読点区切り）\n・「タスク削除　掃除　洗濯　料理」で複数タスク削除（スペース区切り）\n・「タスク一覧」でリスト表示';
     }
 
     console.log('返信テキスト:', replyText);
@@ -428,6 +531,56 @@ function testAddShoppingItem() {
 }
 
 /**
+ * 複数買い物アイテム追加のテスト用関数（読点区切り）
+ */
+function testAddMultipleShoppingItems() {
+  console.log('=== 複数買い物アイテム追加テスト開始（読点区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-add-multiple-shopping-token',
+          message: {
+            text: '買い物追加　パン、バナナ、トマト、牛乳'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数買い物アイテム追加テスト完了（読点区切り） ===');
+}
+
+/**
+ * 複数買い物アイテム追加のテスト用関数（スペース区切り）
+ */
+function testAddMultipleShoppingItemsWithSpace() {
+  console.log('=== 複数買い物アイテム追加テスト開始（スペース区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-add-multiple-shopping-space-token',
+          message: {
+            text: '買い物追加　パン　バナナ　トマト　牛乳'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数買い物アイテム追加テスト完了（スペース区切り） ===');
+}
+
+/**
  * 買い物アイテム削除のテスト用関数
  */
 function testDeleteShoppingItem() {
@@ -450,6 +603,56 @@ function testDeleteShoppingItem() {
 
   doPost(testEvent);
   console.log('=== 買い物アイテム削除テスト完了 ===');
+}
+
+/**
+ * 複数買い物アイテム削除のテスト用関数（読点区切り）
+ */
+function testDeleteMultipleShoppingItems() {
+  console.log('=== 複数買い物アイテム削除テスト開始（読点区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-delete-multiple-shopping-token',
+          message: {
+            text: '買い物削除　パン、バナナ、トマト'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数買い物アイテム削除テスト完了（読点区切り） ===');
+}
+
+/**
+ * 複数買い物アイテム削除のテスト用関数（スペース区切り）
+ */
+function testDeleteMultipleShoppingItemsWithSpace() {
+  console.log('=== 複数買い物アイテム削除テスト開始（スペース区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-delete-multiple-shopping-space-token',
+          message: {
+            text: '買い物削除　パン　バナナ　トマト'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数買い物アイテム削除テスト完了（スペース区切り） ===');
 }
 
 /**
@@ -503,6 +706,56 @@ function testAddTask() {
 }
 
 /**
+ * 複数タスク追加のテスト用関数（読点区切り）
+ */
+function testAddMultipleTasks() {
+  console.log('=== 複数タスク追加テスト開始（読点区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-add-multiple-task-token',
+          message: {
+            text: 'タスク追加　掃除、洗濯、料理、買い物'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数タスク追加テスト完了（読点区切り） ===');
+}
+
+/**
+ * 複数タスク追加のテスト用関数（スペース区切り）
+ */
+function testAddMultipleTasksWithSpace() {
+  console.log('=== 複数タスク追加テスト開始（スペース区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-add-multiple-task-space-token',
+          message: {
+            text: 'タスク追加　掃除　洗濯　料理　買い物'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数タスク追加テスト完了（スペース区切り） ===');
+}
+
+/**
  * タスク削除のテスト用関数
  */
 function testDeleteTask() {
@@ -525,6 +778,56 @@ function testDeleteTask() {
 
   doPost(testEvent);
   console.log('=== タスク削除テスト完了 ===');
+}
+
+/**
+ * 複数タスク削除のテスト用関数（読点区切り）
+ */
+function testDeleteMultipleTasks() {
+  console.log('=== 複数タスク削除テスト開始（読点区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-delete-multiple-task-token',
+          message: {
+            text: 'タスク削除　掃除、洗濯、料理'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数タスク削除テスト完了（読点区切り） ===');
+}
+
+/**
+ * 複数タスク削除のテスト用関数（スペース区切り）
+ */
+function testDeleteMultipleTasksWithSpace() {
+  console.log('=== 複数タスク削除テスト開始（スペース区切り） ===');
+
+  // テスト用のイベントオブジェクトを作成
+  const testEvent = {
+    postData: {
+      contents: JSON.stringify({
+        events: [{
+          type: 'message',
+          replyToken: 'test-delete-multiple-task-space-token',
+          message: {
+            text: 'タスク削除　掃除　洗濯　料理'
+          }
+        }]
+      })
+    }
+  };
+
+  doPost(testEvent);
+  console.log('=== 複数タスク削除テスト完了（スペース区切り） ===');
 }
 
 /**
